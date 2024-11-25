@@ -1,12 +1,12 @@
 import java.io.*;
 import java.util.*;
 
-// Subject class to manage subjects and grades
-class Subject {
+// Assignment class to manage individual assignments
+class Assignment implements Serializable {
     private String name;
     private double grade;
 
-    public Subject(String name, double grade) {
+    public Assignment(String name, double grade) {
         this.name = name;
         this.grade = grade;
     }
@@ -33,8 +33,48 @@ class Subject {
     }
 }
 
+// Subject class to manage subjects and their assignments
+class Subject implements Serializable {
+    private String name;
+    private List<Assignment> assignments;
+
+    public Subject(String name) {
+        this.name = name;
+        this.assignments = new ArrayList<>();
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void addAssignment(String assignmentName, double grade) {
+        assignments.add(new Assignment(assignmentName, grade));
+    }
+
+    public void removeAssignment(String assignmentName) {
+        assignments.removeIf(a -> a.getName().equalsIgnoreCase(assignmentName));
+    }
+
+    public List<Assignment> getAssignments() {
+        return assignments;
+    }
+
+    public double calculateAverage() {
+        double sum = 0;
+        for (Assignment assignment : assignments) {
+            sum += assignment.getGrade();
+        }
+        return assignments.isEmpty() ? 0 : sum / assignments.size();
+    }
+
+    @Override
+    public String toString() {
+        return name + " (Average: " + calculateAverage() + ")";
+    }
+}
+
 // Student class to manage student data
-class Student {
+class Student implements Serializable {
     private String id;
     private String name;
     private List<Subject> subjects;
@@ -68,17 +108,23 @@ class Student {
     public double calculateAverage() {
         double sum = 0;
         for (Subject subject : subjects) {
-            sum += subject.getGrade();
+            sum += subject.calculateAverage();
         }
         return subjects.isEmpty() ? 0 : sum / subjects.size();
     }
 
     public double getHighestGrade() {
-        return subjects.stream().mapToDouble(Subject::getGrade).max().orElse(0);
+        return subjects.stream()
+                .mapToDouble(Subject::calculateAverage)
+                .max()
+                .orElse(0);
     }
 
     public double getLowestGrade() {
-        return subjects.stream().mapToDouble(Subject::getGrade).min().orElse(0);
+        return subjects.stream()
+                .mapToDouble(Subject::calculateAverage)
+                .min()
+                .orElse(0);
     }
 
     @Override
@@ -90,11 +136,10 @@ class Student {
 // StudentManagementSystem class to handle SMS operations
 public class StudentManagementSystem {
     private Map<String, Student> students = new HashMap<>();
-    private Scanner scanner = new Scanner(System.in);
+    private transient Scanner scanner = new Scanner(System.in); // Scanner is transient for serialization
 
-    // Menu to interact with the system
     public void menu() {
-        int choice;
+        int choice = 0;
         do {
             System.out.println("\n--- Student Management System ---");
             System.out.println("1. Add Student");
@@ -106,8 +151,13 @@ public class StudentManagementSystem {
             System.out.println("7. Load Data");
             System.out.println("0. Exit");
             System.out.print("Choose an option: ");
+            if (!scanner.hasNextInt()) {
+                System.out.println("Invalid choice. Please enter a number.");
+                scanner.nextLine(); // Clear invalid input
+                continue;
+            }
             choice = scanner.nextInt();
-            scanner.nextLine(); // consume newline
+            scanner.nextLine(); // Consume newline
             switch (choice) {
                 case 1 -> addStudent();
                 case 2 -> removeStudent();
@@ -122,7 +172,6 @@ public class StudentManagementSystem {
         } while (choice != 0);
     }
 
-    // Add a new student
     private void addStudent() {
         System.out.print("Enter student ID: ");
         String id = scanner.nextLine();
@@ -133,7 +182,6 @@ public class StudentManagementSystem {
         System.out.println("Student added.");
     }
 
-    // Remove a student by ID
     private void removeStudent() {
         System.out.print("Enter student ID to remove: ");
         String id = scanner.nextLine();
@@ -144,7 +192,6 @@ public class StudentManagementSystem {
         }
     }
 
-    // Update student information
     private void updateStudent() {
         System.out.print("Enter student ID to update: ");
         String id = scanner.nextLine();
@@ -152,16 +199,33 @@ public class StudentManagementSystem {
         if (student != null) {
             System.out.print("Enter subject name: ");
             String subjectName = scanner.nextLine();
-            System.out.print("Enter grade for " + subjectName + ": ");
+
+            Subject subject = student.getSubjects().stream()
+                    .filter(s -> s.getName().equalsIgnoreCase(subjectName))
+                    .findFirst()
+                    .orElse(null);
+            if (subject == null) {
+                subject = new Subject(subjectName);
+                student.addSubject(subject);
+            }
+
+            System.out.print("Enter assignment name: ");
+            String assignmentName = scanner.nextLine();
+            System.out.print("Enter grade for " + assignmentName + ": ");
+            if (!scanner.hasNextDouble()) {
+                System.out.println("Invalid grade. Please enter a number.");
+                scanner.nextLine();
+                return;
+            }
             double grade = scanner.nextDouble();
-            student.addSubject(new Subject(subjectName, grade));
-            System.out.println("Student updated.");
+            scanner.nextLine();
+            subject.addAssignment(assignmentName, grade);
+            System.out.println("Assignment added/updated.");
         } else {
             System.out.println("Student not found.");
         }
     }
 
-    // View all students
     private void viewAllStudents() {
         if (students.isEmpty()) {
             System.out.println("No students to display.");
@@ -169,28 +233,35 @@ public class StudentManagementSystem {
             for (Student student : students.values()) {
                 System.out.println(student);
                 for (Subject subject : student.getSubjects()) {
-                    System.out.println("   " + subject);
+                    System.out.println("  " + subject);
+                    for (Assignment assignment : subject.getAssignments()) {
+                        System.out.println("    " + assignment);
+                    }
                 }
             }
         }
     }
 
-    // Generate report
     private void generateReport() {
         System.out.println("\n--- Report ---");
         if (students.isEmpty()) {
             System.out.println("No students to report on.");
             return;
         }
-        
+
         for (Student student : students.values()) {
-            System.out.println(student);
+            System.out.println("\n" + student);
+            for (Subject subject : student.getSubjects()) {
+                System.out.println("  " + subject);
+                for (Assignment assignment : subject.getAssignments()) {
+                    System.out.println("    " + assignment);
+                }
+            }
             System.out.println("Highest Grade: " + student.getHighestGrade());
             System.out.println("Lowest Grade: " + student.getLowestGrade());
         }
-    
+    }
 
-    // Save data to a file
     private void saveData() {
         try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream("students.dat"))) {
             oos.writeObject(students);
@@ -200,7 +271,7 @@ public class StudentManagementSystem {
         }
     }
 
-    // Load data from a file
+    @SuppressWarnings("unchecked")
     private void loadData() {
         try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream("students.dat"))) {
             students = (Map<String, Student>) ois.readObject();
